@@ -90,8 +90,8 @@ class Sequencer:
         print(f"Computing set of sequence items for {self.name} ...")
         itemset = set()
         for row in self.data:
-            for call in row:
-                itemset.add(call)
+            for item in row:
+                itemset.add(item)
         self.items = sorted(list(itemset))
 
     # Uses the sorted set of API calls to compress the data to mere integers
