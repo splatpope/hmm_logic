@@ -1,6 +1,5 @@
-from json import load, loads, dump, dumps
+from json import loads, dumps
 from json.encoder import JSONEncoder
-from .sequencer import Index_Split, Sequencer
 from typing import Dict, List, Optional
 from pomegranate import HiddenMarkovModel, DiscreteDistribution
 
