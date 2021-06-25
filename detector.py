@@ -17,6 +17,9 @@ class Detector:
             self.load(load_name)
             return
         self.datasets = datasets
+        if not self.datasets:
+            print("Please try again with datasets this time")
+            raise ValueError()
         itemset = set()
         for ds in self.datasets:
             itemset = itemset.union(set(ds.items)) 
@@ -42,8 +45,8 @@ class Detector:
 
     def train_models(self, dataset: Sequencer, indices: Index_Split, stop_tr=1e-6) -> None:
         print("Training models...")
-        for mdl, index_list in self.models, indices[1]:
-            mdl.train(dataset.data, index_list)
+        for mdl, index_list in zip(self.models, indices[1]):
+            mdl.train([dataset.sequence(i) for i in index_list], index_list)
 
     def save(self, name, indices):
         with open(self.models_path + name + ".json", "w") as out_f:

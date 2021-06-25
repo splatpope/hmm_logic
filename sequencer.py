@@ -115,7 +115,7 @@ class Sequencer:
     def sequence(self, index: int, items: List[str] = None) -> Iterable[str]:
         if not items:
             items = self.items
-        return (items[item] for item in self.data[index])
+        return [items[item] for item in self.data[index]]
 
     # Million call long sequences that have very long stretches of similar data
     # aren't good for us, let's just kill them
