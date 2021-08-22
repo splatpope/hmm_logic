@@ -2,6 +2,10 @@ import json
 import os
 from datetime import datetime
 from typing import Callable, Iterable, List, Optional, Tuple
+from random import shuffle
+from math import floor
+
+from numpy import array_split
 
 Sequence = List[int]
 Items_List = List[str]
@@ -26,11 +30,12 @@ class Sequencer:
         else:
             return self.data[item]
 
-    def _check_savefiles(self) -> List[str]:
-        data_dir_contents = os.listdir(self.savefile_loc)
+    @classmethod
+    def _check_savefiles(cls, name: str) -> List[str]:
+        data_dir_contents = os.listdir(cls.savefile_loc)
         if not data_dir_contents:
             return None
-        savefiles = [self.savefile_loc + "/" + file for file in data_dir_contents if file.partition("-")[0] == self.name]
+        savefiles = [cls.savefile_loc + "/" + file for file in data_dir_contents if file.partition("-")[0] == name]
         if not savefiles:
             return None
         return sorted(savefiles, key=os.path.getmtime, reverse=True)
@@ -49,26 +54,29 @@ class Sequencer:
                 print("Creating new sequence dataset...")
         self.data = processor(source, amount)
 
-    def load(self, source: str = None) -> None:
+    @classmethod
+    def load(cls, source: str = None) -> None:
         if not os.path.isfile(source):
             err = "Dataset savefile not found. (Supplied path : " + (f"'{source}'" if source else "(none)") + ")"
             raise ValueError(err)
         print("Loading save data from file :", source)
+        res = cls("dummy")
         with open(source, 'r') as in_f:
             input = json.load(in_f)
             header = input["header"]
-            if header["name"] != self.name:
-                raise ValueError("Mismatch between dataset name and name in save data !")
-            self.items = header["items"]
-            self.data = input["data"]
+            res.name = header["name"]
+            res.items = header["items"]
+            res.data = input["data"]
         print("Savefile loaded.")
+        return res
 
-    def load_latest(self) -> None:
-        savefiles = self._check_savefiles()
+    @classmethod
+    def load_latest(cls, name: str) -> None:
+        savefiles = cls._check_savefiles(name)
         if not savefiles:
-            print(f"No savefiles found for dataset : {self.name}")
+            print(f"No savefiles found for dataset : {name}")
             return
-        self.load(savefiles[0])
+        return cls.load(savefiles[0])
 
     def save(self) -> None:
         filename = self.name + '-' + datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -106,7 +114,7 @@ class Sequencer:
 
     def _convert_sequence(self, seq: Sequence, other_items: Items_List) -> Iterable[int]:
         convert = lambda item: other_items.index(self.items[item])
-        return (convert(item) for item in seq)
+        return [convert(item) for item in seq]
 
     def convert_calls(self, other_items: Items_List):
         self.data = [self._convert_sequence(sequence, other_items) for sequence in self.data]
@@ -132,14 +140,11 @@ class Sequencer:
     # we want to be able to split the dataset two ways : 
     # training data / validation data : ratio
     # data sections for each HMM, so we get interesting models : folds = n_models
-    def split(self, ratio: float, folds: int) -> Index_Split:
-        from numpy import array_split
-        from random import shuffle
-        from math import floor
-
-        train_max = floor(len(self.data) * ratio)
+    @classmethod
+    def split(cls, i_range, ratio: float, folds: int) -> Index_Split:
+        train_max = floor(len(list(i_range)) * ratio)
         # get all possible indices and mix em up
-        i: Total_Indices = list(range(len(self.data)))
+        i: Total_Indices = list(i_range)
         shuffle(i)
 
         ti: List[int] = i[:train_max]

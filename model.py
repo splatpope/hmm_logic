@@ -1,35 +1,34 @@
 from json import loads, dumps
-from json.encoder import JSONEncoder
 from typing import Dict, List, Optional
+
+from numpy.random import default_rng
 from pomegranate import HiddenMarkovModel, DiscreteDistribution
 
 class HMM:
-    def __init__(self, items: List[str], h_states: Optional[int] = 4, skip_init: bool = False, seed: Optional[int] = 0):
-        from numpy import random
-        rng = random.default_rng(seed)
-
-        if skip_init:
-            return
-        N = h_states
-        M = len(items)
-        P = [1/N] * N
-        trans_mat = self._rand_norm_mat(N, N, rng)
+    def __init__(self, items: List[str], h_states: Optional[int] = 4, B = None, rng = None):
+        if not rng:
+            rng = default_rng()
+        self.rng = rng
+        o_states = len(items)
+        P = [1/h_states] * h_states  # init hidden probs generated uniformly
+        trans_mat = self._rand_norm_mat(h_states, h_states)
         dists = list()
-        for i in range(N):
-            probs = self._rand_norm_mat(1, M, rng)[0]
-            b_qi = dict()
-            for i, call in enumerate(items):
-                b_qi[call] = probs[i]
-            dists.append(DiscreteDistribution(b_qi))
+        if not B:  # generate emissions randomly
+            for i in range(h_states):
+                probs = self._rand_norm_mat(1, o_states)[0]
+                b_qi = dict()
+                for index, call in enumerate(items):
+                    b_qi[call] = probs[index]
+                dists.append(DiscreteDistribution(b_qi))
+        else:
+            dists = [DiscreteDistribution(b_qi) for b_qi in B]
         print(trans_mat)
-        print(dists)
-        print(P)
         self.model = HiddenMarkovModel.from_matrix(trans_mat, dists, P)
-        self.setup()
+        self.setup_default_options()
         self.state = "fresh"
         self.notes = ""
-    
-    def setup(self, stop_tr: float = 1e-8, inertia: float = 0.1, em_pc = 1e-6):
+
+    def setup_default_options(self, stop_tr: float = 1e-8, inertia: float = 0.1, em_pc: float = 1e-6):
         self.options = {
             "stop_tr": stop_tr,
             "inertia": inertia,
@@ -37,13 +36,14 @@ class HMM:
         }
         return self.options
 
-    def train(self, data: List, indices: List[int], options: Dict[str, str] = None) -> float:
+    def train(self, data: List, indices: List[int], options: Dict[str, float] = None) -> float:
         if not options:
             options = self.options
-        self.indices = indices
+        else:
+            self.options = options
         imp = self.model.fit(
-            data, 
-            verbose=True, 
+            data,
+            verbose=True,
             n_jobs=4,
             emission_pseudocount=options["em_pc"],
             #lr_decay=0.75,
@@ -51,6 +51,7 @@ class HMM:
             stop_threshold=options["stop_tr"],
             multiple_check_input=False,
             )
+        self.indices = indices
         self.state = "trained"
         return imp
 
@@ -67,23 +68,30 @@ class HMM:
             "metadata": metadata_j,
         }
 
-    def load(self, HMM_j: dict) -> None:
+    @classmethod
+    def load(cls, HMM_j: dict, rng = None) -> None:
+        mdl = cls.__new__(cls)
+        if not rng:
+            rng = default_rng()
+        mdl.rng = rng
         metadata = HMM_j["metadata"]
-        self.state = metadata["state"]
-        self.indices = metadata["indices"]
-        self.notes = metadata["notes"]
+        mdl.state = metadata["state"]
+        mdl.indices = metadata["indices"]
+        mdl.notes = metadata["notes"]
         mdl_data_j = dumps(HMM_j["model"])
-        self.model = HiddenMarkovModel.from_json(mdl_data_j)
+        mdl.model = HiddenMarkovModel.from_json(mdl_data_j)
+        mdl.setup_default_options()
+        return mdl
 
     # build a matrix whose rows sum to 1
-    def _rand_norm_mat(self, n_rows: int, n_cols: int, rng):
+    def _rand_norm_mat(self, n_rows: int, n_cols: int):
         mat = list()
         for i in range(n_rows):
-            v = list()
+            row = list()
             for j in range(n_cols):
-                v.append(rng.random())
-            v_sum = sum(v)
-            v = [item/v_sum for item in v]
-            mat.append(v)
+                row.append(self.rng.random())
+            row_sum = sum(row)
+            row = [item/row_sum for item in row]
+            mat.append(row)
         return mat
     
