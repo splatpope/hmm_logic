@@ -112,9 +112,9 @@ class Detector:
                 dec.items = in_j["items"]
                 dec.notes = in_j["notes"]
                 dec.seed = in_j["seed"]
-                self.rng = default_rng(dec.seed)
+                dec.rng = default_rng(dec.seed)
                 dec.datasets = [Sequencer.load_latest(name) for name in in_j["datasets"]]
-                dec.models = [HMM.load(hmm_j, self.rng) for hmm_j in in_j["models"]]
+                dec.models = [HMM.load(hmm_j, dec.rng) for hmm_j in in_j["models"]]
             except KeyError as error:
                 print("Detector save file incompatible :", error)
         return dec
