@@ -1,8 +1,11 @@
 from json import loads, dumps
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from numpy.random import default_rng
 from pomegranate import HiddenMarkovModel, DiscreteDistribution
+
+# redefine this to suit your computer
+MACHINE_THREADS = 4
 
 class HMM:
     def __init__(self, items: List[str], h_states: Optional[int] = 4, B = None, rng = None):
@@ -22,43 +25,39 @@ class HMM:
                 dists.append(DiscreteDistribution(b_qi))
         else:
             dists = [DiscreteDistribution(b_qi) for b_qi in B]
+        print("Transition matrix:")
         print(trans_mat)
         self.model = HiddenMarkovModel.from_matrix(trans_mat, dists, P)
         self.setup_default_options()
         self.state = "fresh"
         self.notes = ""
 
-    def setup_default_options(self, stop_tr: float = 1e-8, inertia: float = 0.1, em_pc: float = 1e-6):
+    def setup_default_options(self, stop_tr: float = 1e-6, inertia: float = 1e-3, em_pc: float = 1e-8):
         self.options = {
             "stop_tr": stop_tr,
             "inertia": inertia,
             "em_pc": em_pc,
+            "verbose": True,
         }
         return self.options
 
-    def train(self, data: List, indices: List[int], options: Dict[str, float] = None) -> float:
-        if not options:
-            options = self.options
-        else:
-            self.options = options
-        imp = self.model.fit(
-            data,
-            verbose=True,
-            n_jobs=4,
-            emission_pseudocount=options["em_pc"],
+    def train(self, data: List, options: Dict[str, Any] = None) -> float:
+        self.options.update(options)
+        imp = self.model.fit(data,
+            verbose=self.options["verbose"],
+            n_jobs=MACHINE_THREADS,
+            emission_pseudocount=self.options["em_pc"],
             #lr_decay=0.75,
-            inertia=options["inertia"],
-            stop_threshold=options["stop_tr"],
-            multiple_check_input=False,
+            inertia=self.options["inertia"],
+            stop_threshold=self.options["stop_tr"],
+            #multiple_check_input=False,
             )
-        self.indices = indices
         self.state = "trained"
         return imp
 
     def serialize(self) -> dict:
         mdl_j = loads(self.model.to_json())
         metadata_j = {
-            "indices": self.indices,
             "options": self.options,
             "state": self.state,
             "notes": self.notes,
@@ -75,12 +74,13 @@ class HMM:
             rng = default_rng()
         mdl.rng = rng
         metadata = HMM_j["metadata"]
+        mdl.options = metadata["options"]
         mdl.state = metadata["state"]
-        mdl.indices = metadata["indices"]
         mdl.notes = metadata["notes"]
         mdl_data_j = dumps(HMM_j["model"])
         mdl.model = HiddenMarkovModel.from_json(mdl_data_j)
-        mdl.setup_default_options()
+        if not mdl.options:
+            mdl.setup_default_options()
         return mdl
 
     # build a matrix whose rows sum to 1

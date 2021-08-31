@@ -11,12 +11,12 @@ Sequence = List[int]
 Items_List = List[str]
 Total_Indices = List[int]
 Training_Indices = List[List[int]]
-Validation_Indices = List[int]
-Index_Split = Tuple[Total_Indices, Training_Indices, Validation_Indices]
+Testing_Indices = List[int]
+Index_Split = Tuple[Testing_Indices, Training_Indices]
 
 class Sequencer:
 
-    savefile_loc = "./data/long"
+    savefile_loc = "./data/sequencers"
 
     def __init__(self, name: str) -> None:
         self.name = name
@@ -42,7 +42,7 @@ class Sequencer:
         
     def create(self, processor: Callable[[str, int], List], source: str, amount: Optional[int] = 0) -> None:
         # Ask the user if they want to load previous data if it exists
-        savefiles = self._check_savefiles()
+        savefiles = self._check_savefiles(self.name)
         if savefiles:
             reload = ""
             while reload.lower() not in ['y', 'n']:
@@ -65,6 +65,7 @@ class Sequencer:
             input = json.load(in_f)
             header = input["header"]
             res.name = header["name"]
+            res.compressed = header["compression"]
             res.items = header["items"]
             res.data = input["data"]
         print("Savefile loaded.")
@@ -85,9 +86,9 @@ class Sequencer:
         with open(save_path, 'w') as out_f:
             header = dict()
             header["name"] = self.name
-            if not self.items:
-                print("Saving requires baking the itemset !")
-                self.bake_itemset()
+            if not self.compressed:
+                print("Warning : saving uncompressed data")
+            header["compression"] = self.compressed
             header["items"] = self.items
             output = dict()
             output["header"] = header
@@ -121,6 +122,8 @@ class Sequencer:
         self.items = other_items
 
     def sequence(self, index: int, items: List[str] = None) -> Iterable[str]:
+        if not self.compressed:
+            raise TypeError("Can only decompress compressed data.")
         if not items:
             items = self.items
         return [items[item] for item in self.data[index]]
@@ -130,7 +133,7 @@ class Sequencer:
     def remove_length_outliers(self) -> None:
         from numpy import percentile
         dlengths = map(len, self.data)
-        q75, q25 = percentile(dlengths, [75, 25])
+        q75, q25 = percentile(list(dlengths), [75, 25])
         iqr = q75-q25
         lmax = q75 + (1.5 * iqr)
         lmin = q25 - (1.5 * iqr)
@@ -138,18 +141,18 @@ class Sequencer:
         self.data = [seq for seq in self.data if len(seq) >= lmin and len(seq) <= lmax]
 
     # we want to be able to split the dataset two ways : 
-    # training data / validation data : ratio
+    # training data / test data : ratio
     # data sections for each HMM, so we get interesting models : folds = n_models
     @classmethod
-    def split(cls, i_range, ratio: float, folds: int) -> Index_Split:
+    def split(cls, i_range, ratio: float, folds: int, rng_f = None) -> Index_Split:
         train_max = floor(len(list(i_range)) * ratio)
         # get all possible indices and mix em up
         i: Total_Indices = list(i_range)
-        shuffle(i)
+        shuffle(i, rng_f)
 
-        ti: List[int] = i[:train_max]
-        vi: Validation_Indices = i[train_max:]
+        train_i: List[int] = i[:train_max]
+        test_i: Testing_Indices = i[train_max:]
         # make folds in training data
-        ti: Training_Indices = [a.tolist() for a in array_split(ti, folds)]
+        train_i: Training_Indices = [a.tolist() for a in array_split(train_i, folds)]
 
-        return (i, ti, vi)
+        return (test_i, train_i)

@@ -1,7 +1,7 @@
 import os
 from typing import Optional, List
 
-def binary_process(source: str, amount: Optional[int] = 0) -> List[str]:
+def process_binaries(source: str, amount: Optional[int] = 0) -> List[str]:
     # for now, only process one binary
     chunk_size = 500
 
